@@ -1,6 +1,9 @@
 Simulação Caótica do Mercado Financeiro — Threads
 Trabalho Prático — Sistemas Operacionais
 
+Alunos: Anna Clara Mendes Siqueira Rennó
+Tiago Rodrigues Gregório
+
  Sobre o Projeto
 Simulador caótico do mercado financeiro brasileiro (BOVESPA) desenvolvido em Python, com o objetivo de demonstrar na prática os conceitos do Capítulo 04 — Threads da disciplina de Sistemas Operacionais.
 O simulador dispara múltiplas Threads, cada uma representando uma notícia de mercado que impacta os preços de 10 ações reais do Ibovespa. À medida que o número de threads aumenta, 
