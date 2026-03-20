@@ -1,5 +1,7 @@
 """SIMULAÇÃO CAÓTICA DO MERCADO FINANCEIRO — utilizando Threads
 """
+
+#IMPORTAÇÕES
 import tkinter as tk
 from tkinter import ttk, font as tkfont
 import threading
@@ -12,24 +14,28 @@ from datetime import datetime
 import queue
 
 # DETECÇÃO DE RESOLUÇÃO — escala automática
+
 def _detectar():
-    tmp = tk.Tk(); tmp.withdraw()
-    sw, sh = tmp.winfo_screenwidth(), tmp.winfo_screenheight()
+    #criando janela adaptavel ao monitor
+    tmp = tk.Tk(); tmp.withdraw() #criação de janela
+    sw, sh = tmp.winfo_screenwidth(), tmp.winfo_screenheight() #mede a tela
     tmp.destroy()
-    f = max(0.60, min(sh / 1080.0, 2.0))
+    f = max(0.60, min(sh / 1080.0, 2.0)) #zoom janela de 60% até 200%
     return f, sw, sh, min(int(1560*f), sw-30), min(int(940*f), sh-50)
 
-SCALE, SCR_W, SCR_H, WIN_W, WIN_H = _detectar()
-def S(x): return max(1, int(x * SCALE))
-def F(x): return max(7, int(x * SCALE))
+SCALE, SCR_W, SCR_H, WIN_W, WIN_H = _detectar() #largura monitor + janela
+def S(x): return max(1, int(x * SCALE)) #escala = nunca menor que 1
+def F(x): return max(7, int(x * SCALE)) # textos = nunca menor que 7
 
 
 # LIMITE SEGURO DE THREADS
+
 LIMITE_AVISO   = 9    # amarelo: mercado caótico, UI começa a sentir
 LIMITE_PERIGO  = 15   # vermelho: pânico total, UI visivelmente lenta
 LIMITE_MAXIMO  = 22   # travamento garantido acima de ~19
 
-# AÇÕES
+# AÇÕES, aqueles que vão influenciar no mercado financeiro
+#dicionario chave-valor; chave {nome,valor_ação_inicial,cor_no_grafico}
 ACOES = {
     "VALE3": {"nome": "Vale S.A.",       "preco": 68.50, "cor": "#4FC3F7"},
     "PETR4": {"nome": "Petrobras PN",    "preco": 38.20, "cor": "#FF8A65"},
@@ -42,9 +48,11 @@ ACOES = {
     "RENT3": {"nome": "Localiza",        "preco": 43.60, "cor": "#EF9A9A"},
     "SUZB3": {"nome": "Suzano S.A.",     "preco": 57.20, "cor": "#B39DDB"},
 }
+#cria uma lista só com as chaves do nosso dicionário 
 TICKERS = list(ACOES.keys())
 
 # BANCO DE NOTÍCIAS REAIS
+#cada noticia tem data real, mexe no preço da açao, intensidade e cor de alerta.
 BANCO_NOTICIAS = [
     {"data":"2019-01-25","titulo":"Rompimento da Barragem de Brumadinho — Vale suspende operações",
      "impacto":{"VALE3":-24.5},"intensidade":"CRÍTICA","cor":"#FF1744","fonte":"Reuters/B3"},
@@ -108,7 +116,7 @@ BANCO_NOTICIAS = [
 ]
 
 
-# CORES
+# CORES USADAS NA TELA
 BG    = "#0A0E17"
 BG2   = "#0D1220"
 BG3   = "#111827"
@@ -128,12 +136,12 @@ TEXT3 = "#94A3B8"
 GRADE = "#1E293B"
 FM    = "Courier New"
 
-# Estados das threads 
+# Estados das threads para visualização no gráfico
 ESTADOS = {
     # Etapa                  Cor         Significado
     "NOVA"       : ("#607D8B", "Thread criada, ainda não iniciada"),
     "PRONTA"     : ("#90A4AE", "Na fila, aguardando CPU (RUNNABLE)"),
-    "DISPUTANDO" : (AMAR,      "Tentando adquirir o mutex — BLOQUEADA na fila"),
+    "DISPUTANDO" : (AMAR,      "Tentando adquirir o mutex (uma thread por vez) — BLOQUEADA na fila"),
     "EXECUTANDO" : (VERDE,     "Com acesso exclusivo — RODANDO no CPU"),
     "CALCULANDO" : (AZUL,      "Dentro da seção crítica — Data Section compartilhada"),
     "APLICANDO"  : (LARA,      "Escrevendo no estado global — seção crítica"),
@@ -142,9 +150,11 @@ ESTADOS = {
 }
 
 # CANDLE (formato vela do gráfico utilizado no HomeBroker)
+#A cada 2 segundos, criação de uma nova vela, valores o,h,l,c iguais ao preço atual
 class Candle:
     def __init__(self, o):
         self.o = self.h = self.l = self.c = o
+#Novo preço p, preço fechamento = c, preço h é maior ou não
     def update(self, p):
         self.c = p; self.h = max(self.h, p); self.l = min(self.l, p)
 
@@ -157,51 +167,55 @@ class EstadoMercado:
     """
     def __init__(self):
         # MUTEX — evita race condition na seção crítica
-        self.lock          = threading.Lock()
+        #cadeado, apenas thread atual
+        self.lock          = threading.Lock() 
         # Data Section compartilhada (todas as threads leem/escrevem aqui)
-        self.precos        = {t: d["preco"] for t, d in ACOES.items()}
-        self.candles       = {t: [] for t in ACOES}
+        self.precos        = {t: d["preco"] for t, d in ACOES.items()} #preços atuais de cada ação
+        self.candles       = {t: [] for t in ACOES} #histórico de gráfico de velas
         self.candle_cur    = {t: Candle(d["preco"]) for t, d in ACOES.items()}
-        self.noticias      = deque(maxlen=8)
-        self.colisoes      = 0     # vezes que thread esperou na fila do mutex
+        self.noticias      = deque(maxlen=8) #ultimas 8 notícias
+        self.colisoes      = 0     # quantas vezes que determinada thread esperou na fila do mutex
         self.total         = 0
         self.rodando       = False
         self.num_threads   = 4
         self.volatilidade  = 1.0
         self.candle_secs   = 2.0
-        self.ui_q          = queue.Queue()
+        self.ui_q          = queue.Queue()  #informações threads para a tela.
         self.threads_vivas : list = []
         self.threads_lock  = threading.Lock()
         self.travamentos   = 0     
 
+#criação de mercado, onde threads terão que esperar para entrar
 estado = EstadoMercado()
-PID = os.getpid()
+PID = os.getpid() 
 
 # THREAD DE NOTÍCIA
 # Cada instância = 1 Kernel Thread
 # possui: Thread ID próprio, PC próprio, Stack própria, Register Set próprio
 # compartilha: Code Section (este .py), Data Section (estado global acima)
+#CRIAÇAO DE THREAD 
 class ThreadNoticia(threading.Thread):
-    _cnt = 0
+    _cnt = 0 #CONTADOR
     _cnt_lock = threading.Lock()   # lock para contador (seção crítica pequena)
 
     def __init__(self):
+        #Se programa principal fechar, thread fecha também
         super().__init__(daemon=True)
         # ── Atributos da Stack (exclusivos desta thread) ──────────────────
         with ThreadNoticia._cnt_lock:
             ThreadNoticia._cnt += 1
             self.tid = ThreadNoticia._cnt          # Thread ID da simulação
-        self.noticia    = random.choice(BANCO_NOTICIAS)
+        self.noticia    = random.choice(BANCO_NOTICIAS) # vai no banco de noticias e seleciona noticia aleatoria
         self.nome       = f"Thread-{self.tid}"     # nome no estilo Java/slides
         self.estado_thr = "NOVA"                   # estado atual da thread
         self.ts_inicio  = time.time()              # tempo de criação (Stack)
         self.so_ident   = None                     # ID real do Kernel (SO)
-        self.impactos   = {}                       # resultado do cálculo
+        self.impactos   = {}                       # resultado dos cálculos
 
     def _log(self, estado_thr, detalhe=""):
         """Envia entrada para o log da UI. Usa a Data Section compartilhada (ui_q)."""
-        self.estado_thr = estado_thr
-        estado.ui_q.put({
+        self.estado_thr = estado_thr #atualiza estado thread
+        estado.ui_q.put({ #informaçoes thread
             "tid"    : self.tid,
             "nome"   : self.nome,
             "estado" : estado_thr,
@@ -217,7 +231,7 @@ class ThreadNoticia(threading.Thread):
         """
         self.so_ident = self.ident
 
-        with estado.threads_lock:
+        with estado.threads_lock: #se mutex estiver com outra thread, fica bloqueada
             estado.threads_vivas.append(self)
 
         self._log("PRONTA", f"Notícia: {self.noticia['titulo'][:42]}")
@@ -233,13 +247,15 @@ class ThreadNoticia(threading.Thread):
         self._log("DISPUTANDO",
                   "Tentando adquirir o mutex — BLOQUEADA se ocupado!")
 
+        #verifica se tem muita thread esperando, sendo assim, avisa o sistema de possível travamento
         n_so = threading.active_count()
         if n_so >= LIMITE_PERIGO:
             self._log("DISPUTANDO",
                       f"⚠ {n_so} Threads!risco de travamento!")
             with estado.threads_lock:
-                estado.travamentos += 1
+                estado.travamentos += 1 #mais uma thread esperando
 
+        #execução, altera mutex, calcula e retorna os impactos com gráficos candle.
         with estado.lock:
             self._log("EXECUTANDO",
                       f"Mutex adquirido! [colisão #{estado.colisoes+1}]")
@@ -409,7 +425,7 @@ def draw_candles(cv, ticker):
     p = estado.precos[ticker]
     cv.create_line(ml, py(p), w-mr, py(p), fill=ACOES[ticker]["cor"], dash=(3,4), width=1)
 
-# GUI PRINCIPAL
+# GUI PRINCIPAL, desenha a janela principal
 class HomeBroker:
     def __init__(self, root):
         self.root     = root
@@ -431,6 +447,7 @@ class HomeBroker:
         tk.Frame(self.root, bg=GRADE, height=1).grid(row=1, column=0, sticky="sew")
         self._corpo(); self._footer()
 
+    #cabeçalho
     def _header(self):
         h = tk.Frame(self.root, bg=BG, height=S(46))
         h.grid(row=0, column=0, sticky="ew"); h.grid_propagate(False)
@@ -451,6 +468,7 @@ class HomeBroker:
         self.lbl_hora = tk.Label(info, text="", font=(FM, F(8)), bg=BG, fg=TEXT2)
         self.lbl_hora.pack(side="left", padx=S(6))
 
+    #botoes, controles start, zoom, threads
     def _controles(self):
         c = tk.Frame(self.root, bg=BG2, height=S(50))
         c.grid(row=1, column=0, sticky="ew"); c.grid_propagate(False)
@@ -498,6 +516,7 @@ class HomeBroker:
                       command=lambda v=val: setattr(estado,"candle_secs",v)
                       ).grid(row=0, column=nxt(), padx=1)
 
+    #divisão colunas
     def _corpo(self):
         body = tk.Frame(self.root, bg=BG)
         body.grid(row=2, column=0, sticky="nsew")
