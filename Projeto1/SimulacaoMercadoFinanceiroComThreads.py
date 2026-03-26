@@ -32,7 +32,7 @@ def F(x): return max(7, int(x * SCALE)) # textos = nunca menor que 7
 
 LIMITE_AVISO   = 9    # amarelo: mercado caótico, UI começa a sentir
 LIMITE_PERIGO  = 15   # vermelho: pânico total, UI visivelmente lenta
-LIMITE_MAXIMO  = 22   # travamento garantido acima de ~19
+LIMITE_MAXIMO  = 20   # travamento garantido acima de ~19
 
 # AÇÕES, aqueles que vão influenciar no mercado financeiro
 #dicionario chave-valor; chave {nome,valor_ação_inicial,cor_no_grafico}
