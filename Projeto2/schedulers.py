@@ -111,8 +111,9 @@ def simular_rr(processos_orig, quantum):
     """
 
     # ─── PASSO 1: Prepara cópias dos processos como dicionários ───────────
-    # Usamos cópias para não modificar os objetos originais.
-    # "restante" começa igual ao burst e vai diminuindo a cada fatia executada.
+
+    # Cada processo ganha um campo restante (começa igual ao burst).
+    # Esse campo vai diminuir conforme a CPU é usada.
     ps = [{"nome": p.nome, "chegada": p.t_chegada_sim,
             "burst": p.burst_time, "restante": p.burst_time,
             "cor": p.cor_gantt}
@@ -122,19 +123,14 @@ def simular_rr(processos_orig, quantum):
 
     # Relógio simulado: começa no instante em que o primeiro processo chega
     t = min(p["chegada"] for p in ps)
-
     # Fila circular do Round Robin — processos prontos para executar
     fila_rr = []
-
     # Processos que ainda não chegaram ao sistema (chegada > t atual)
     restantes_orig = list(ps)
-
     # Resultado visual: lista de (nome, t_inicio, t_fim, cor) para desenhar o Gantt
     gantt = []
-
     # Registra o instante em que cada processo termina definitivamente
     conclusao = {}
-
     # Guarda os tempos de chegada para calcular as métricas no final
     chegadas = {p["nome"]: p["chegada"] for p in ps}
 
