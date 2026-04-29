@@ -103,10 +103,17 @@ def simular_sjf(processos_orig):
 
 def simular_rr(processos_orig, quantum):
     """Round Robin com quantum configurável. Preemptivo."""
+
+    # ─── PASSO 1: Prepara cópias dos processos como dicionários ───────────
+
+    # Cada processo ganha um campo restante (começa igual ao burst).
+    # Esse campo vai diminuir conforme a CPU é usada.
     ps = [{"nome": p.nome, "chegada": p.t_chegada_sim,
             "burst": p.burst_time, "restante": p.burst_time,
             "cor": p.cor_gantt}
            for p in processos_orig]
+    
+    # ─── PASSO 2: Inicializa estruturas de controle ───────────────────────
 
     t = min(p["chegada"] for p in ps)
     fila_rr = []
@@ -114,22 +121,43 @@ def simular_rr(processos_orig, quantum):
     gantt = []; conclusao = {}
     chegadas = {p["nome"]: p["chegada"] for p in ps}
 
+    # ─── PASSO 3: Loop principal ──────────────────────────────────────────
+    # Continua enquanto houver processos esperando para chegar OU na fila
+
     while restantes_orig or fila_rr:
+
+         # Admite na fila todos os processos cujo tempo de chegada já foi atingido
+        
         novos = [p for p in restantes_orig if p["chegada"] <= t]
         for p in novos:
             fila_rr.append(p); restantes_orig.remove(p)
+
+        # Se a fila ainda está vazia, a CPU fica ociosa:
+        # avança o relógio até o próximo processo chegar
 
         if not fila_rr:
             t = min(p["chegada"] for p in restantes_orig)
             continue
 
+        # Pega o primeiro processo da fila (política FIFO dentro do RR)
+
         c = fila_rr.pop(0)
 
+        # Calcula a fatia: executa no máximo 1 quantum, mas nunca mais do que o necessário
+        # Exemplo: restante=1 e quantum=3 → executa apenas 1u, não 3u
+
         fatia = min(quantum, c["restante"])
+
+        # Registra esse bloco de execução no Gantt
         gantt.append((c["nome"], t, t + fatia, c["cor"]))
+
+        # Avança o relógio e desconta o tempo executado
         t += fatia
         c["restante"] -= fatia
 
+        # Admite processos que chegaram DURANTE a execução dessa fatia.
+        # Eles entram na fila ANTES do processo atual voltar,
+        # garantindo a ordem correta de escalonamento.    
         novos2 = [p for p in restantes_orig if p["chegada"] <= t]
         for p in novos2:
             fila_rr.append(p); restantes_orig.remove(p)
@@ -139,6 +167,9 @@ def simular_rr(processos_orig, quantum):
         else:
             conclusao[c["nome"]] = t   # concluído
 
+    # ─── PASSO 4: Calcula as métricas ────────────────────────────────────
+
+    # Turnaround = tempo total que o processo ficou no sistema (do início ao fim)
     # Espera real no RR = turnaround - burst
     turnarounds = {nome: max(0, conclusao[nome] - chegadas[nome]) for nome in conclusao}
     esperas_reais = {}
@@ -146,8 +177,12 @@ def simular_rr(processos_orig, quantum):
         if p["nome"] in conclusao:
             esperas_reais[p["nome"]] = max(0, turnarounds[p["nome"]] - p["burst"])
 
+    # ─── PASSO 5: Monta e retorna o resultado ────────────────────────────
+    
     vals = list(esperas_reais.values())
     media = sum(vals) / len(vals) if vals else 0
+    
+    # Fórmula legível para exibir na tela, ex: "(6 + 2 + 6) / 3 = 4,7"
     formula = f"({' + '.join(str(round(v,1)) for v in vals)}) / {len(vals)} = {media:.1f}"
 
     r = ResultadoSimulacao("RR", processos_orig, gantt, esperas_reais, turnarounds, media)
