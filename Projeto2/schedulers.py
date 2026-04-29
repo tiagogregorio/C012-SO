@@ -31,41 +31,72 @@ def simular_fcfs(processos_orig):
     r.formula = formula
     return r
 
-def simular_sjf(processos_orig):
-    """SJF — Shortest Job First. Não preemptivo, menor burst_time primeiro."""
-    ps = [{"nome": p.nome, "chegada": p.t_chegada_sim,
-            "burst": p.burst_time, "restante": p.burst_time,
-            "cor": p.cor_gantt}
-           for p in processos_orig]
 
+def simular_sjf(processos_orig):
+    """
+    SJF — Shortest Job First.
+    Algoritmo não preemptivo que escolhe o processo com o menor burst_time primeiro.
+    """
+    # 1. PREPARAÇÃO: Transforma os objetos Processo em dicionários simples para a simulação
+    ps = [{"nome": p.nome, "chegada": p.t_chegada_sim,
+           "burst": p.burst_time, "restante": p.burst_time,
+           "cor": p.cor_gantt}
+          for p in processos_orig]
+
+    # Inicializa o tempo no momento da chegada do primeiro processo
     t = min(p["chegada"] for p in ps)
-    prontos = []; fila = list(ps)
-    gantt = []; esperas = {}; turnarounds = {}
+
+    # Listas de controle: 'prontos' (aguardando CPU) e 'fila' (ainda não chegaram)
+    prontos = []
+    fila = list(ps)
+
+    # Estruturas para armazenar os resultados que serão desenhados na UI
+    gantt = []
+    esperas = {}
+    turnarounds = {}
     primeiro_cpu = {}
 
+    # 2. LOOP PRINCIPAL: Executa enquanto houver processos para processar
     while fila or prontos:
+        # Move processos que já "chegaram" no tempo 't' para a lista de prontos
         novos = [p for p in fila if p["chegada"] <= t]
-        for p in novos: prontos.append(p); fila.remove(p)
+        for p in novos:
+            prontos.append(p)
+            fila.remove(p)
 
+        # Se ninguém chegou ainda, o tempo avança até a próxima chegada
         if not prontos:
             t = min(p["chegada"] for p in fila)
             continue
 
+        # 3. O CORAÇÃO DO SJF: Ordena a lista de prontos pelo menor tempo de execução (burst)
         prontos.sort(key=lambda p: p["burst"])
+
+        # Seleciona o processo mais curto (o primeiro da lista ordenada)
         c = prontos.pop(0)
 
         if c["nome"] not in primeiro_cpu:
             primeiro_cpu[c["nome"]] = t
 
-        esperas[c["nome"]]     = t - c["chegada"]
+        # 4. CÁLCULO DE MÉTRICAS: Registra a espera e monta o bloco do gráfico
+        # Espera = Tempo atual - Tempo de chegada
+        esperas[c["nome"]] = t - c["chegada"]
+
+        # Adiciona ao Gantt: (nome, início, fim, cor)
         gantt.append((c["nome"], t, t + c["burst"], c["cor"]))
+
+        # Avança o relógio 't' somando o burst do processo que acabou de rodar
         t += c["burst"]
+
+        # Turnaround = Tempo total desde a chegada até o fim da execução
         turnarounds[c["nome"]] = t - c["chegada"]
 
+    # 5. FINALIZAÇÃO: Calcula a média e formata a string da fórmula para a UI
     vals = list(esperas.values())
     media = sum(vals) / len(vals) if vals else 0
     formula = f"({' + '.join(str(v) for v in vals)}) / {len(vals)} = {media:.1f}"
 
+    # Retorna o objeto ResultadoSimulacao com tudo mastigado para a interface
     r = ResultadoSimulacao("SJF", processos_orig, gantt, esperas, turnarounds, media)
     r.formula = formula
     return r
